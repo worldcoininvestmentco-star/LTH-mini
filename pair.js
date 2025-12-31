@@ -14,7 +14,7 @@ import pn from 'awesome-phonenumber';
 
 const router = express.Router();
 const SESSION_DIR = './session';
-const OWNER = ['256XXXXXXXX']; // <-- replace with your WhatsApp number
+const OWNER = ['256789966218']; // <-- replace with your WhatsApp number
 
 if (!fs.existsSync(SESSION_DIR)) fs.mkdirSync(SESSION_DIR);
 
