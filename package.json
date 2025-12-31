@@ -1,7 +1,7 @@
 {
-  "name": "Lucky-Tech-Hub-Bot",
-  "version": "1.0.0",
-  "description": "Lucky Tech Hub Bot - WhatsApp Pair Code Generator",
+  "name": "lucky-tech-hub-bot",
+  "version": "1.0.1",
+  "description": "Lucky Tech Hub Bot - WhatsApp Mini Bot with Admin, AI, Media, and Group Moderation",
   "main": "index.js",
   "type": "module",
   "engines": {
@@ -9,19 +9,22 @@
   },
   "scripts": {
     "start": "node index.js",
+    "dev": "nodemon index.js",
     "build": "echo 'No build step required'"
   },
   "author": "ʟᴜᴄᴋʏ ➋➊➑",
   "license": "ISC",
   "dependencies": {
     "@whiskeysockets/baileys": "^6.7.21",
-    "awesome-phonenumber": "7.2.0",
+    "awesome-phonenumber": "^7.2.0",
     "body-parser": "^1.20.3",
     "express": "^4.21.2",
-    "path": "^0.12.7",
-    "phone": "3.1.55",
-    "pino": "9.5.0",
+    "phone": "^3.1.55",
+    "pino": "^9.5.0",
     "qrcode": "^1.5.4",
     "qrcode-terminal": "^0.12.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
   }
 }
