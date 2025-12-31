@@ -4,32 +4,35 @@ import pino from 'pino';
 import {
     makeWASocket,
     useMultiFileAuthState,
-    delay,
     makeCacheableSignalKeyStore,
     Browsers,
+    fetchLatestBaileysVersion,
     jidNormalizedUser,
-    fetchLatestBaileysVersion
+    delay
 } from '@whiskeysockets/baileys';
 import pn from 'awesome-phonenumber';
 
 const router = express.Router();
 const SESSION_DIR = './session';
+const OWNER = ['256XXXXXXXX']; // ← replace with your number
 
-// Ensure session folder exists
-if (!fs.existsSync(SESSION_DIR)) {
-    fs.mkdirSync(SESSION_DIR);
+if (!fs.existsSync(SESSION_DIR)) fs.mkdirSync(SESSION_DIR);
+
+// ===== SIMPLE AI (OFFLINE) =====
+function aiReply(text) {
+    if (text.includes('money')) return '💰 Focus on skills, consistency & patience.';
+    if (text.includes('bot')) return '🤖 I am a Lucky Tech Hub WhatsApp Bot.';
+    if (text.includes('hello')) return '👋 Hello! How can I help?';
+    return '🤖 I am thinking… try asking differently.';
 }
 
 router.get('/', async (req, res) => {
     let num = req.query.number;
-    if (!num) return res.status(400).send({ code: 'Phone number required' });
+    if (!num) return res.status(400).send({ code: 'Number required' });
 
-    num = num.replace(/[^0-9]/g, '');
+    num = num.replace(/\D/g, '');
     const phone = pn('+' + num);
-    if (!phone.isValid()) {
-        return res.status(400).send({ code: 'Invalid phone number' });
-    }
-
+    if (!phone.isValid()) return res.status(400).send({ code: 'Invalid number' });
     num = phone.getNumber('e164').replace('+', '');
 
     const { state, saveCreds } = await useMultiFileAuthState(SESSION_DIR);
@@ -39,91 +42,104 @@ router.get('/', async (req, res) => {
         version,
         auth: {
             creds: state.creds,
-            keys: makeCacheableSignalKeyStore(state.keys, pino({ level: "fatal" })),
+            keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'fatal' })),
         },
-        logger: pino({ level: "fatal" }),
+        logger: pino({ level: 'fatal' }),
         browser: Browsers.windows('Chrome'),
-        printQRInTerminal: false,
-        markOnlineOnConnect: true
+        markOnlineOnConnect: true,
+        connectTimeoutMs: 20000,
+        keepAliveIntervalMs: 15000
     });
 
     sock.ev.on('creds.update', saveCreds);
 
-    sock.ev.on('connection.update', async (update) => {
-        const { connection } = update;
-
-        if (connection === 'open') {
-            console.log('✅ Bot connected & ready');
-
-            await sock.sendMessage(jidNormalizedUser(num + '@s.whatsapp.net'), {
-                text: `✅ *Lucky Tech Hub Mini Bot Activated*\n\nType *.menu* to see commands`
-            });
-        }
-
-        if (connection === 'close') {
-            console.log('🔁 Reconnecting...');
-        }
-    });
-
+    // ===== FAST PAIRING FIX =====
     if (!state.creds.registered) {
-        await delay(3000);
+        await delay(800);
         const code = await sock.requestPairingCode(num);
         return res.send({ code: code.match(/.{1,4}/g).join('-') });
     }
 
-    // ================= COMMAND HANDLER =================
+    sock.ev.on('connection.update', ({ connection }) => {
+        if (connection === 'open') {
+            console.log('✅ Bot Online');
+        }
+    });
+
+    // ===== COMMAND HANDLER =====
     sock.ev.on('messages.upsert', async ({ messages }) => {
         const msg = messages[0];
         if (!msg.message || msg.key.fromMe) return;
 
-        const text =
-            msg.message.conversation ||
-            msg.message.extendedTextMessage?.text ||
-            '';
-
         const from = msg.key.remoteJid;
+        const text = msg.message.conversation ||
+            msg.message.extendedTextMessage?.text || '';
 
-        const reply = (txt) =>
-            sock.sendMessage(from, { text: txt }, { quoted: msg });
+        const isGroup = from.endsWith('@g.us');
+        const sender = msg.key.participant || from;
+        const isOwner = OWNER.includes(sender.split('@')[0]);
 
-        switch (text.toLowerCase()) {
+        const reply = (t) => sock.sendMessage(from, { text: t }, { quoted: msg });
 
-            case '.menu':
-                reply(`🤖 *Lucky Tech Hub Mini Bot*
-                
-1. .ping
-2. .alive
-3. .time
-4. .date
-5. .owner
-6. .about
-7. .help
-8. .status
-9. .uptime
-10. .joke
-11. .quote
-12. .hi
-13. .bye
-14. .rules
-15. .thanks
+        // ===== STATUS =====
+        if (text === '.status') reply('🟢 Online & Stable');
+        if (text === '.uptime') reply(`⏳ ${process.uptime().toFixed(0)} seconds`);
+        if (text === '.ping') reply('🏓 Pong');
+
+        // ===== MENU =====
+        if (text === '.menu') {
+            reply(`🤖 *Lucky Tech Hub Bot*
+            
+Admin:
+.promote .demote .kick .tagall
+
+AI:
+.ai <question>
+
+Media:
+.sticker .toimg
+
+Group:
+.mute .unmute
+
+Status:
+.status .uptime .ping
 `);
-                break;
+        }
 
-            case '.ping': reply('🏓 Pong!'); break;
-            case '.alive': reply('✅ Bot is alive'); break;
-            case '.time': reply(`⏰ Time: ${new Date().toLocaleTimeString()}`); break;
-            case '.date': reply(`📅 Date: ${new Date().toDateString()}`); break;
-            case '.owner': reply('👤 Owner: Lucky Tech Hub'); break;
-            case '.about': reply('🤖 Mini WhatsApp Bot powered by Lucky Tech Hub'); break;
-            case '.help': reply('Type *.menu* to see commands'); break;
-            case '.status': reply('🟢 Online & stable'); break;
-            case '.uptime': reply(`⏳ Uptime: ${process.uptime().toFixed(0)}s`); break;
-            case '.joke': reply('😂 Why did JS break up? Too many promises!'); break;
-            case '.quote': reply('💬 Success comes from consistency.'); break;
-            case '.hi': reply('👋 Hello there!'); break;
-            case '.bye': reply('👋 Goodbye!'); break;
-            case '.rules': reply('📜 No spam. Be respectful.'); break;
-            case '.thanks': reply('🙏 You’re welcome!'); break;
+        // ===== AI =====
+        if (text.startsWith('.ai ')) {
+            reply(aiReply(text.slice(4).toLowerCase()));
+        }
+
+        // ===== GROUP ADMIN =====
+        if (isGroup) {
+            const metadata = await sock.groupMetadata(from);
+            const admins = metadata.participants
+                .filter(p => p.admin)
+                .map(p => p.id);
+
+            const isAdmin = admins.includes(sender);
+
+            if (text === '.tagall' && isAdmin) {
+                let tags = metadata.participants.map(p => `@${p.id.split('@')[0]}`).join('\n');
+                sock.sendMessage(from, { text: tags, mentions: metadata.participants.map(p => p.id) });
+            }
+
+            if (text === '.kick' && isAdmin && msg.message.extendedTextMessage?.contextInfo?.mentionedJid) {
+                sock.groupParticipantsUpdate(from, msg.message.extendedTextMessage.contextInfo.mentionedJid, 'remove');
+            }
+
+            // Anti-link
+            if (text.includes('https://chat.whatsapp.com') && !isAdmin) {
+                await sock.sendMessage(from, { delete: msg.key });
+            }
+        }
+
+        // ===== MEDIA =====
+        if (text === '.sticker' && msg.message.imageMessage) {
+            const buffer = await sock.downloadMediaMessage(msg);
+            await sock.sendMessage(from, { sticker: buffer });
         }
     });
 });
