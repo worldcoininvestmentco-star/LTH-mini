@@ -18,7 +18,7 @@ const OWNER = ['256XXXXXXXX']; // <-- replace with your WhatsApp number
 
 if (!fs.existsSync(SESSION_DIR)) fs.mkdirSync(SESSION_DIR);
 
-// ===== SIMPLE AI (OFFLINE) =====
+// Simple AI (offline)
 function aiReply(text) {
     text = text.toLowerCase();
     if (text.includes('money')) return '💰 Focus on skills, consistency & patience.';
@@ -54,9 +54,9 @@ router.get('/', async (req, res) => {
 
     sock.ev.on('creds.update', saveCreds);
 
-    // ===== FAST PAIRING =====
+    // Fast pairing
     if (!state.creds.registered) {
-        await delay(800); // short wait before pairing
+        await delay(800);
         try {
             const code = await sock.requestPairingCode(num);
             return res.send({ code: code.match(/.{1,4}/g).join('-') });
@@ -65,12 +65,22 @@ router.get('/', async (req, res) => {
         }
     }
 
-    sock.ev.on('connection.update', ({ connection }) => {
-        if (connection === 'open') console.log('✅ Bot Online');
+    // Connection update
+    sock.ev.on('connection.update', async ({ connection }) => {
+        if (connection === 'open') {
+            console.log('✅ Bot Online');
+
+            // Send connection notice to owner
+            const ownerJid = jidNormalizedUser(OWNER[0] + '@s.whatsapp.net');
+            await sock.sendMessage(ownerJid, {
+                text: `✅ *Lucky Tech Hub Mini Bot Connected!*\n\nYour WhatsApp bot is now online and ready to use.\nType *.menu* to see commands.`
+            });
+        }
+
         if (connection === 'close') console.log('🔁 Reconnecting...');
     });
 
-    // ===== COMMAND HANDLER =====
+    // Command handler
     sock.ev.on('messages.upsert', async ({ messages }) => {
         const msg = messages[0];
         if (!msg.message || msg.key.fromMe) return;
@@ -85,38 +95,25 @@ router.get('/', async (req, res) => {
 
         const reply = (t) => sock.sendMessage(from, { text: t }, { quoted: msg });
 
-        // ===== STATUS =====
+        // Status commands
         if (text === '.status') reply('🟢 Online & Stable');
         if (text === '.uptime') reply(`⏳ ${process.uptime().toFixed(0)} seconds`);
         if (text === '.ping') reply('🏓 Pong');
 
-        // ===== MENU =====
+        // Menu
         if (text === '.menu') {
             reply(`🤖 *Lucky Tech Hub Bot*
-            
-Admin:
-.promote .demote .kick .tagall
-
-AI:
-.ai <question>
-
-Media:
-.sticker .toimg
-
-Group:
-.mute .unmute
-
-Status:
-.status .uptime .ping
-`);
+Admin: .promote .demote .kick .tagall
+AI: .ai <question>
+Media: .sticker .toimg
+Group: .mute .unmute
+Status: .status .uptime .ping`);
         }
 
-        // ===== AI REPLY =====
-        if (text.startsWith('.ai ')) {
-            reply(aiReply(text.slice(4)));
-        }
+        // AI
+        if (text.startsWith('.ai ')) reply(aiReply(text.slice(4)));
 
-        // ===== GROUP ADMIN / MODERATION =====
+        // Group moderation
         if (isGroup) {
             const metadata = await sock.groupMetadata(from);
             const admins = metadata.participants.filter(p => p.admin).map(p => p.id);
@@ -140,7 +137,7 @@ Status:
             }
         }
 
-        // ===== MEDIA DOWNLOADER =====
+        // Media
         if (text === '.sticker' && msg.message.imageMessage) {
             const buffer = await sock.downloadMediaMessage(msg);
             await sock.sendMessage(from, { sticker: buffer });
