@@ -31,6 +31,34 @@ function aiReply(text) {
     return '🤖 I’m still learning. Try another question.';
 }
 
+
+const getText = (msg) => {
+    if (!msg.message) return '';
+
+    if (msg.message.conversation) return msg.message.conversation;
+
+    if (msg.message.extendedTextMessage?.text)
+        return msg.message.extendedTextMessage.text;
+
+    if (msg.message.imageMessage?.caption)
+        return msg.message.imageMessage.caption;
+
+    if (msg.message.videoMessage?.caption)
+        return msg.message.videoMessage.caption;
+
+    if (msg.message.ephemeralMessage)
+        return getText({ message: msg.message.ephemeralMessage.message });
+
+    if (msg.message.viewOnceMessage)
+        return getText({ message: msg.message.viewOnceMessage.message });
+
+    return '';
+};
+
+
+
+
+
 router.get('/', async (req, res) => {
     let num = req.query.number;
     const useQR = req.query.qr === 'true';
@@ -121,10 +149,9 @@ Type *.menu* to see commands.`
 
         const from = msg.key.remoteJid;
         const sender = msg.key.participant || from;
-        const text =
-            msg.message.conversation ||
-            msg.message.extendedTextMessage?.text ||
-            '';
+        const text = getText(msg).trim();
+if (!text) return;
+
 
         const isGroup = from.endsWith('@g.us');
         const isOwner = OWNER.includes(sender.split('@')[0]);
