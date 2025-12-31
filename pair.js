@@ -56,14 +56,30 @@ router.get('/', async (req, res) => {
 
     // Fast pairing
     if (!state.creds.registered) {
-        await delay(800);
-        try {
-            const code = await sock.requestPairingCode(num);
-            return res.send({ code: code.match(/.{1,4}/g).join('-') });
-        } catch (err) {
-            return res.status(503).send({ code: 'Failed to get pairing code' });
+    let codeSent = false;
+
+    sock.ev.on('connection.update', async (update) => {
+        const { connection } = update;
+
+        if (!codeSent && connection === 'connecting') {
+            try {
+                const code = await sock.requestPairingCode(num);
+                if (!res.headersSent && code) {
+                    const formatted = code.match(/.{1,4}/g)?.join('-') || code;
+                    res.send({ code: formatted });
+                    console.log('Pairing code sent:', formatted);
+                    codeSent = true;
+                }
+            } catch (err) {
+                console.error('Failed to request pairing code:', err);
+                if (!res.headersSent) {
+                    res.status(503).send({ code: 'Failed to get pairing code.' });
+                }
+            }
         }
-    }
+    });
+}
+
 
     // Connection update
     sock.ev.on('connection.update', async ({ connection }) => {
