@@ -18,7 +18,7 @@ const OWNER = ['256XXXXXXXX']; // <-- replace with your WhatsApp number
 
 if (!fs.existsSync(SESSION_DIR)) fs.mkdirSync(SESSION_DIR);
 
-// Simple AI (offline)
+// ===== SIMPLE AI (OFFLINE) =====
 function aiReply(text) {
     text = text.toLowerCase();
     if (text.includes('money')) return '💰 Focus on skills, consistency & patience.';
@@ -54,49 +54,45 @@ router.get('/', async (req, res) => {
 
     sock.ev.on('creds.update', saveCreds);
 
-    // Fast pairing
+    // ===== PAIRING CODE LOGIN =====
     if (!state.creds.registered) {
-    let codeSent = false;
-
-    sock.ev.on('connection.update', async (update) => {
-        const { connection } = update;
-
-        if (!codeSent && connection === 'connecting') {
-            try {
-                const code = await sock.requestPairingCode(num);
-                if (!res.headersSent && code) {
-                    const formatted = code.match(/.{1,4}/g)?.join('-') || code;
-                    res.send({ code: formatted });
-                    console.log('Pairing code sent:', formatted);
-                    codeSent = true;
-                }
-            } catch (err) {
-                console.error('Failed to request pairing code:', err);
-                if (!res.headersSent) {
-                    res.status(503).send({ code: 'Failed to get pairing code.' });
-                }
+        try {
+            await delay(800); // short wait
+            const code = await sock.requestPairingCode(num);
+            const formattedCode = code.match(/.{1,4}/g)?.join('-') || code;
+            if (!res.headersSent) {
+                console.log(`Pairing code for ${num}: ${formattedCode}`);
+                res.send({ code: formattedCode });
+            }
+        } catch (err) {
+            console.error('❌ Failed to request pairing code:', err);
+            if (!res.headersSent) {
+                res.status(503).send({ code: 'Failed to get pairing code. Check number and network.' });
             }
         }
-    });
-}
+    }
 
-
-    // Connection update
-    sock.ev.on('connection.update', async ({ connection }) => {
+    // ===== CONNECTION NOTICE =====
+    sock.ev.on('connection.update', async ({ connection, lastDisconnect, isNewLogin }) => {
         if (connection === 'open') {
-            console.log('✅ Bot Online');
-
-            // Send connection notice to owner
+            console.log('✅ Bot connected!');
             const ownerJid = jidNormalizedUser(OWNER[0] + '@s.whatsapp.net');
-            await sock.sendMessage(ownerJid, {
-                text: `✅ *Lucky Tech Hub Mini Bot Connected!*\n\nYour WhatsApp bot is now online and ready to use.\nType *.menu* to see commands.`
-            });
+            await sock.sendMessage(ownerJid, { text: '✅ *Lucky Tech Hub Mini Bot Connected!* \nYour WhatsApp bot is now online.\nType *.menu* to see commands.' });
         }
 
-        if (connection === 'close') console.log('🔁 Reconnecting...');
+        if (connection === 'close') {
+            const statusCode = lastDisconnect?.error?.output?.statusCode;
+            if (statusCode === 401) {
+                console.log('❌ Unauthorized. Delete session folder and pair again.');
+            } else {
+                console.log('🔁 Connection closed. Retrying...');
+            }
+        }
+
+        if (isNewLogin) console.log('🔐 New login via pairing code.');
     });
 
-    // Command handler
+    // ===== COMMAND HANDLER =====
     sock.ev.on('messages.upsert', async ({ messages }) => {
         const msg = messages[0];
         if (!msg.message || msg.key.fromMe) return;
@@ -111,12 +107,12 @@ router.get('/', async (req, res) => {
 
         const reply = (t) => sock.sendMessage(from, { text: t }, { quoted: msg });
 
-        // Status commands
+        // ===== STATUS =====
         if (text === '.status') reply('🟢 Online & Stable');
         if (text === '.uptime') reply(`⏳ ${process.uptime().toFixed(0)} seconds`);
         if (text === '.ping') reply('🏓 Pong');
 
-        // Menu
+        // ===== MENU =====
         if (text === '.menu') {
             reply(`🤖 *Lucky Tech Hub Bot*
 Admin: .promote .demote .kick .tagall
@@ -126,10 +122,10 @@ Group: .mute .unmute
 Status: .status .uptime .ping`);
         }
 
-        // AI
+        // ===== AI =====
         if (text.startsWith('.ai ')) reply(aiReply(text.slice(4)));
 
-        // Group moderation
+        // ===== GROUP ADMIN / MODERATION =====
         if (isGroup) {
             const metadata = await sock.groupMetadata(from);
             const admins = metadata.participants.filter(p => p.admin).map(p => p.id);
@@ -153,7 +149,7 @@ Status: .status .uptime .ping`);
             }
         }
 
-        // Media
+        // ===== MEDIA DOWNLOADER =====
         if (text === '.sticker' && msg.message.imageMessage) {
             const buffer = await sock.downloadMediaMessage(msg);
             await sock.sendMessage(from, { sticker: buffer });
