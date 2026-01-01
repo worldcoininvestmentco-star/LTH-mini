@@ -1,0 +1,15 @@
+{
+  "name": "lucky2-bot",
+  "version": "1.0.0",
+  "description": "Lucky2 WhatsApp Bot - Pair once and use forever",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "pair": "node pair.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.9",
+    "pino": "^8.17.0"
+  }
+}
